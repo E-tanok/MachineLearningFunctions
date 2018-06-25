@@ -91,6 +91,9 @@ def content_analysis(myDataFrame):
     which contains 'r' if the percent of missing values are respectively under 10%,
     20%, 30% and 40% or 'g' on the other hand : this is useful for plotting
     the missing values by columns with colors.
+
+    PARAMS :
+    - 'MyDataFrame' : The entry DataFrame
     """
     Empty_List = []
     Unique_values = []
@@ -144,13 +147,13 @@ def identify_my_quantiles(my_rfmd_DataFrame,my_quantile_column):
     df_quantiles['main_category']=df_quantiles['color'].astype(str)
 
     return df_quantiles
-
 def RScore(x,param,dictionary):
     """
     This function goal is to build a column of quartiles (1,2,3 or 4) based on a
     continuous feature values.
-    The more the feature is high, the more the quartile returned is low
-
+    The more the feature is high, the more the quartile returned is low.
+    It comes from 'Susan Li' work on
+    https://towardsdatascience.com/find-your-best-customers-with-customer-segmentation-in-python-61d602f9eee6
     RESULT : A new DataFrame column which contains the quartiles applied to the
     continuous feature.
 
@@ -179,6 +182,8 @@ def FMScore(x,param,dictionary):
     This function goal is to build a column of quartiles (1,2,3 or 4) based on a
     continuous feature values.
     The more the feature is high, the more the quartile returned is high
+    It comes from 'Susan Li' work on
+    https://towardsdatascience.com/find-your-best-customers-with-customer-segmentation-in-python-61d602f9eee6
 
     RESULT : A new DataFrame column which contains the quartiles applied to the
     continuous feature.
@@ -416,3 +421,156 @@ def percent_of_total(myDataFrame,myColumnList):
         myDataFrame[column] = 100*(myDataFrame[column]/ myDataFrame['total'])
     myDataFrame.drop('total',inplace=True,axis=1)
     return myDataFrame
+
+def convert_in_list(myDataFrame,myColumn):
+    from ast import literal_eval
+    """
+    This function goal is to convert a pandas column into a "list" datatype column
+    IMPORTANT : The column values must match with the python lists pattern in order to be read and converted correctly.
+
+    RESULT : The same column, with each value converted into an array : that's also possible to loop over the array values
+
+    PARAMS :
+    - myDataFrame : the entry DataFrame
+    - myColumn : String, the column to convert
+    """
+
+    myDataFrame[myColumn] = myDataFrame[myColumn].apply(literal_eval)
+    return myDataFrame
+
+def develop(myDataFrame,myArrayColumn):
+    import pandas as pd
+    """
+    This function goal is to develop the values contained in a pandas column which has list of values :
+    IMPORTANT: The column 'myArrayColumn' must be read like a colum containing lists of values; if not, you should transform
+    your column into a "list datatype column" thanks to the 'convert_in_list' function.
+
+    RESULT : each value contained in a given list from a given row generates a new row : the other columns values are repeated
+
+    PARAMS :
+    - 'myDataFrame' : the entry DataFrame
+    - 'myArrayColumn' : the list datatype column you want to generate one row per couple value/value_in_the_list
+    """
+
+    new_df = pd.DataFrame(columns = myDataFrame.columns)
+    not_focus_cols = [x for x in myDataFrame.columns if x!=myArrayColumn]
+    for idx in myDataFrame.index:
+        focus_array = myDataFrame.loc[idx,myArrayColumn]
+        old_values = myDataFrame.loc[idx,]
+
+        for value in focus_array:
+            dict_one_line = {}
+            dict_one_line[myArrayColumn] = value
+            idx_df = len(new_df)
+
+            for col in not_focus_cols:
+                dict_one_line[col] = old_values[col]
+            new_df = new_df.append(dict_one_line,ignore_index=True)
+
+    return new_df
+
+def group_by_frequency(myDataFrame,myColumn):
+    import numpy as np
+    """
+    This function goal is to build an aggregated DataFrame which contains the occurences of the catagorical terms contained in
+    'myColumn' args.
+
+    RESULT : an aggregated DataFrame with the occurences of each values.
+    - The DataFrame is sorted by descending occurences.
+    - It also contains :
+        - rank of each category in terms of occurences.
+        - cumsum of occurences from the first value to the last one.
+        - percent of total occurences covered by the upper categories at a given row.
+
+    PARAMS :
+    - 'myDataFrame' : the entry DataFrame
+    - 'myColumn' : the column concerned by the frequencies count
+    """
+    grouped = myDataFrame.copy()
+    grouped['occurences'] = 1
+    grouped = grouped[[myColumn,'occurences']].groupby(myColumn).sum()
+    grouped.sort_values(by='occurences', ascending=False, inplace=True)
+    grouped['rank'] = range(1,len(grouped)+1)
+    grouped['cumsum'] = np.cumsum(grouped['occurences'])
+    grouped['percent_of_total'] = grouped['cumsum']/grouped['occurences'].sum()
+
+    return grouped
+
+
+def aggregate_col_in_list(myDataFrame,myColumnToAggregate,GroupByColumn,bool_replace_col):
+    import pandas as pd
+    """
+    This function goal is to aggregate a given column values in order to get a list of it's values groupped by an other colum
+
+    RESULT : The entry DataFrame :
+    - with the same number of columns if the 'bool_replace_col' argument is 'True'
+    - with one more column if the 'bool_replace_col' argument is 'False' : in this case the new colum has the name
+    of 'myColumnToAggregate' with the suffix '_list'
+
+    PARAMS :
+    - 'MyDataFrame' |pandas.core.frame.DataFrame : The entry DataFrame
+    - 'myColumnToAggregate'|str : The column you want to convert into a list
+    - 'GroupByColumn' |str : The column you want to use in order to aggregate your 'myColumnToAggregate' column
+    - 'bool_replace_col' |bool : A boolean argument with the value :
+        - True if you want to replace the old column by the new one
+        - False in the other case : the new colum has the name of 'myColumnToAggregate' with the suffix '_list'
+    """
+    temp_dataframe = pd.DataFrame(myDataFrame.groupby(GroupByColumn)[myColumnToAggregate].apply(list))
+    temp_dataframe[GroupByColumn] = temp_dataframe.index
+    myColumnToAggregate_new_name = myColumnToAggregate+"_list"
+
+    if bool_replace_col == True:
+        finalDataFrame = myDataFrame.drop(myColumnToAggregate,axis=1)
+        finalDataFrame = pd.merge(finalDataFrame,temp_dataframe,how='left',on=GroupByColumn)
+
+    else:
+        temp_dataframe.rename(index=str, columns={myColumnToAggregate:myColumnToAggregate_new_name},inplace=True)
+        finalDataFrame = pd.merge(myDataFrame,temp_dataframe,how='left',on=GroupByColumn)
+
+    return finalDataFrame
+
+def dataframe_multiprocessing(myDataFrame,myFunction,myFunctionArg,NUMBER_OF_PROCS):
+    import multiprocessing
+    import pandas as pd
+    import numpy as np
+    """
+    This function goal is to apply existing pandas transformation with multiprocessing.
+    IMPORTANT : the transformations you use must be rows to rows transformation : this function is not adapted for aggregations
+    so you need to use independant (in terms of rows) transformations
+
+    RESULT : The result of your transformation ('myFunction' arg)
+
+    PARAMS :
+    - 'myDataFrame' : the entry DataFrame
+    - 'myFunction' : the transformation/function you want to use with 'dataframe_multiprocessing'
+    - 'myFunctionArg' : the argument of 'myFunction'
+    - 'NUMBER_OF_PROCS' : the number of processors to use : the entry DataFrame will be divided into
+    as many parts than processors used
+    """
+
+    working_DataFrame = myDataFrame.copy()
+    output_schema = list(working_DataFrame.columns)
+    working_DataFrame['old_index'] = working_DataFrame.index
+
+    #We are going to execute a multiprocessing and split the DataFrame in as many parts than processors used :
+    #DataFrame splitting :
+    L_sub_dfs  = np.array_split(working_DataFrame, NUMBER_OF_PROCS)
+    resultDataFrame = pd.DataFrame(columns=output_schema)
+
+    print('Creating pool with %d processes\n' % NUMBER_OF_PROCS)
+    with multiprocessing.Pool(NUMBER_OF_PROCS) as pool:
+        # We initialize a list of tasks which each call the same function, with the same argument 'Tags', but
+        #with a diffrent DataFrame
+        TASKS = [(sub_df, 'Tags') for sub_df in L_sub_dfs]
+        results = [pool.apply_async(develop, t) for t in TASKS]
+        final_results = [r.get() for r in results]
+
+        for sub_df_res in final_results:
+            sub_df_res.index = sub_df_res['old_index']
+            sub_df_res = sub_df_res[output_schema]
+            resultDataFrame = resultDataFrame.append(sub_df_res)
+            print("df_append")
+    resultDataFrame.sort_index(inplace=True)
+
+    del working_DataFrame
+    return resultDataFrame

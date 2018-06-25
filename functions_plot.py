@@ -155,8 +155,9 @@ def radar_plot(myDataFrame,myIndex,myLabels,yticksList,yticks_str_List,lineColor
     import numpy as np
     import matplotlib.pyplot as plt
     """
-    This function goal is to visualize data with a radar plot
-
+    This function goal is to visualize data with a radar plot.
+    It's inspired from 'Chen Shuyao' work on kaggle :
+    https://www.kaggle.com/typewind/draw-a-radar-chart-with-python-in-a-simple-way
     RESULT : A radar plot
 
     PARAMS :
